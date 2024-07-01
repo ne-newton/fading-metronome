@@ -6,56 +6,109 @@
     <title>Metronome</title>
 </head>
 <body>
-    <h1>The Fading Metronome</h1>
+    <h1>Metronome</h1>
     <label for="tempo">Tempo (BPM): </label>
     <input type="number" id="tempo" value="120">
     <button id="start-stop">Start</button>
-    <audio id="click-sound" src="click.mp3" preload="auto"></audio>
 
     <script>
-        const clickSound = document.getElementById('click-sound');
-        const startStopButton = document.getElementById('start-stop');
-        const tempoInput = document.getElementById('tempo');
-
-        let intervalId;
-        let beatCount = 0;
-        let currentModulo = 1;
-        let phaseCount = 0;
-
-        startStopButton.addEventListener('click', () => {
-            if (intervalId) {
-                // Stop the metronome
-                clearInterval(intervalId);
-                intervalId = null;
-                startStopButton.textContent = 'Start';
-            } else {
-                // Start the metronome
-                const bpm = parseInt(tempoInput.value);
-                const interval = 60000 / bpm;
-
-                beatCount = 0;
-                currentModulo = 1;
-                phaseCount = 0;
-
-                intervalId = setInterval(() => {
-                    if (beatCount % currentModulo === 0) {
-                        clickSound.play();
-                    }
-                    
-                    beatCount++;
-                    
-                    if (beatCount >= 16) {
-                        phaseCount++;
-                        beatCount = 0;
-                        if (phaseCount === 1) currentModulo = 2;
-                        else if (phaseCount >= 2 && phaseCount < 4) currentModulo = 4;
-                        else if (phaseCount >= 4 && phaseCount < 8) currentModulo = 8;
-                        else if (phaseCount >= 8) currentModulo = 16;
-                    }
-                }, interval);
-
-                startStopButton.textContent = 'Stop';
+        class Metronome {
+            constructor(tempo = 120) {
+                this.audioContext = null;
+                this.notesInQueue = [];  // notes that have been put into the web audio and may or may not have been played yet {note, time}
+                this.currentBeatInBar = 0;
+                this.tempo = tempo;
+                this.lookahead = 25;  // How frequently to call scheduling function (in milliseconds)
+                this.scheduleAheadTime = 0.1;  // How far ahead to schedule audio (sec)
+                this.nextNoteTime = 0.0;  // when the next note is due
+                this.isRunning = false;
+                this.intervalID = null;
+                this.beatCount = 0;
+                this.currentModulo = 1;
+                this.phaseCount = 0;
             }
+
+            nextNote() {
+                var secondsPerBeat = 60.0 / this.tempo;
+                this.nextNoteTime += secondsPerBeat;
+                this.currentBeatInBar++;
+            }
+
+            scheduleNote(beatNumber, time) {
+                this.notesInQueue.push({ note: beatNumber, time: time });
+
+                if (this.beatCount % this.currentModulo === 0) {
+                    const osc = this.audioContext.createOscillator();
+                    const envelope = this.audioContext.createGain();
+                    
+                    osc.frequency.value = (beatNumber % 4 == 0) ? 1000 : 800;
+                    envelope.gain.value = 1;
+                    envelope.gain.exponentialRampToValueAtTime(1, time + 0.001);
+                    envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.02);
+
+                    osc.connect(envelope);
+                    envelope.connect(this.audioContext.destination);
+
+                    osc.start(time);
+                    osc.stop(time + 0.03);
+                }
+
+                this.beatCount++;
+                
+                if (this.beatCount >= 16) {
+                    this.phaseCount++;
+                    this.beatCount = 0;
+                    if (this.phaseCount === 1) this.currentModulo = 2;
+                    else if (this.phaseCount === 2) this.currentModulo = 4;
+                    else if (this.phaseCount === 3) this.currentModulo = 8;
+                    else if (this.phaseCount >= 4) this.currentModulo = 16;
+                }
+            }
+
+            scheduler() {
+                while (this.nextNoteTime < this.audioContext.currentTime + this.scheduleAheadTime) {
+                    this.scheduleNote(this.currentBeatInBar, this.nextNoteTime);
+                    this.nextNote();
+                }
+            }
+
+            start() {
+                if (this.isRunning) return;
+
+                if (this.audioContext == null) {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                this.isRunning = true;
+                this.currentBeatInBar = 0;
+                this.nextNoteTime = this.audioContext.currentTime + 0.05;
+                this.beatCount = 0;
+                this.currentModulo = 1;
+                this.phaseCount = 0;
+
+                this.intervalID = setInterval(() => this.scheduler(), this.lookahead);
+            }
+
+            stop() {
+                this.isRunning = false;
+                clearInterval(this.intervalID);
+            }
+
+            startStop() {
+                if (this.isRunning) {
+                    this.stop();
+                    document.getElementById('start-stop').textContent = 'Start';
+                } else {
+                    this.start();
+                    document.getElementById('start-stop').textContent = 'Stop';
+                }
+            }
+        }
+
+        const metronome = new Metronome();
+        document.getElementById('start-stop').addEventListener('click', () => metronome.startStop());
+        document.getElementById('tempo').addEventListener('input', function() {
+            metronome.tempo = this.value;
         });
     </script>
 </body>
