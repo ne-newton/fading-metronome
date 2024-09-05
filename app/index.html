@@ -47,21 +47,23 @@
             scheduleNote(beatNumber, time) {
                 this.notesInQueue.push({ note: beatNumber, time: time });
 
-                // Play sound
-                const osc = this.audioContext.createOscillator();
-                const envelope = this.audioContext.createGain();
+                if (this.beatCount % this.currentModulo == 0) {
+                    // Play sound
+                    const osc = this.audioContext.createOscillator();
+                    const envelope = this.audioContext.createGain();
 
-                // Higher frequency for the downbeat
-                osc.frequency.value = (beatNumber % 4 == 0) ? 1000 : 800;
-                envelope.gain.value = 1;
-                envelope.gain.exponentialRampToValueAtTime(1, time + 0.001);
-                envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.02);
+                    // Higher frequency for the downbeat
+                    osc.frequency.value = (beatNumber % 4 == 0) ? 1000 : 800;
+                    envelope.gain.value = 1;
+                    envelope.gain.exponentialRampToValueAtTime(1, time + 0.001);
+                    envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.02);
 
-                osc.connect(envelope);
-                envelope.connect(this.audioContext.destination);
+                    osc.connect(envelope);
+                    envelope.connect(this.audioContext.destination);
 
-                osc.start(time);
-                osc.stop(time + 0.03);
+                    osc.start(time);
+                    osc.stop(time + 0.03);
+                }
 
                 this.beatCount++;
 
@@ -71,16 +73,20 @@
 
                     // If count-in is done, switch to normal metronome phase
                     if (this.beatCount >= this.countInBeats) {
+                        // console.log("I made it here");
                         this.isCountIn = false;
                         this.beatCount = 0;
                         document.getElementById('count-in-display').textContent = '';
                     }
                 }
 
-                // After every 16 beats, halve the clicks (same logic as before)
+                // After every 16 beats, halve the clicks
                 if (!this.isCountIn && this.beatCount >= 16) {
                     this.phaseCount++;
                     this.beatCount = 0;
+                    // console.log("isCountin = ", this.isCountIn);
+                    // console.log("phaseCount = ", this.phaseCount);
+                    // console.log("currentModulo = ", this.currentModulo);
                     if (this.phaseCount === 1) this.currentModulo = 2;
                     else if (this.phaseCount === 2) this.currentModulo = 4;
                     else if (this.phaseCount === 3) this.currentModulo = 8;
