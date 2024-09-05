@@ -4,12 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Metronome</title>
+    <style>
+        #count-in-display {
+            font-size: 48px;
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
     <h1>Metronome</h1>
     <label for="tempo">Tempo (BPM): </label>
     <input type="number" id="tempo" value="120">
     <button id="start-stop">Start</button>
+    <div id="count-in-display"></div> <!-- Display for the count-in -->
 
     <script>
         class Metronome {
@@ -26,6 +34,8 @@
                 this.beatCount = 0;
                 this.currentModulo = 1;
                 this.phaseCount = 0;
+                this.countInBeats = 4;  // 4-beat count-in
+                this.isCountIn = true;
             }
 
             nextNote() {
@@ -37,25 +47,38 @@
             scheduleNote(beatNumber, time) {
                 this.notesInQueue.push({ note: beatNumber, time: time });
 
-                if (this.beatCount % this.currentModulo === 0) {
-                    const osc = this.audioContext.createOscillator();
-                    const envelope = this.audioContext.createGain();
-                    
-                    osc.frequency.value = (beatNumber % 4 == 0) ? 1000 : 800;
-                    envelope.gain.value = 1;
-                    envelope.gain.exponentialRampToValueAtTime(1, time + 0.001);
-                    envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.02);
+                // Play sound
+                const osc = this.audioContext.createOscillator();
+                const envelope = this.audioContext.createGain();
 
-                    osc.connect(envelope);
-                    envelope.connect(this.audioContext.destination);
+                // Higher frequency for the downbeat
+                osc.frequency.value = (beatNumber % 4 == 0) ? 1000 : 800;
+                envelope.gain.value = 1;
+                envelope.gain.exponentialRampToValueAtTime(1, time + 0.001);
+                envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.02);
 
-                    osc.start(time);
-                    osc.stop(time + 0.03);
-                }
+                osc.connect(envelope);
+                envelope.connect(this.audioContext.destination);
+
+                osc.start(time);
+                osc.stop(time + 0.03);
 
                 this.beatCount++;
-                
-                if (this.beatCount >= 16) {
+
+                // Display the count-in beat number
+                if (this.isCountIn) {
+                    document.getElementById('count-in-display').textContent = this.beatCount;
+
+                    // If count-in is done, switch to normal metronome phase
+                    if (this.beatCount >= this.countInBeats) {
+                        this.isCountIn = false;
+                        this.beatCount = 0;
+                        document.getElementById('count-in-display').textContent = '';
+                    }
+                }
+
+                // After every 16 beats, halve the clicks (same logic as before)
+                if (!this.isCountIn && this.beatCount >= 16) {
                     this.phaseCount++;
                     this.beatCount = 0;
                     if (this.phaseCount === 1) this.currentModulo = 2;
@@ -85,6 +108,7 @@
                 this.beatCount = 0;
                 this.currentModulo = 1;
                 this.phaseCount = 0;
+                this.isCountIn = true;  // Reset the count-in
 
                 this.intervalID = setInterval(() => this.scheduler(), this.lookahead);
             }
@@ -92,6 +116,7 @@
             stop() {
                 this.isRunning = false;
                 clearInterval(this.intervalID);
+                document.getElementById('count-in-display').textContent = '';  // Clear display when stopped
             }
 
             startStop() {
